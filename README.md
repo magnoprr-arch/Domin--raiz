@@ -1,2 +1,0 @@
-# Domin--raiz
-Dominó 

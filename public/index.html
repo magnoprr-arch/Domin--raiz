@@ -140,4 +140,215 @@
       <div id="hand"></div>
     </div>
   </div>
-    
+      <script>
+    const socket = io();
+    let currentRoom = '', state = null, selectedIdx = null;
+    let isVip = localStorage.getItem('domino_vip') === 'true';
+    if (isVip) document.body.classList.add('vip-theme');
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('sala')) document.getElementById('join-code').value = urlParams.get('sala').toUpperCase();
+
+    const PIP_STRINGS = { 0: '', 1: '5', 2: '19', 3: '159', 4: '1379', 5: '13579', 6: '134679' };
+
+    function drawHalf(num) {
+      const active = PIP_STRINGS[num] || '';
+      let cells = '';
+      for (let i = 1; i <= 9; i++) {
+        cells += active.includes(String(i)) ? '<span class="dot"></span>' : '<span></span>';
+      }
+      return '<div class="half">' + cells + '</div>';
+    }
+
+    socket.on('toast', m => { const e = document.getElementById('emoji-toast'); e.innerText = m; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); });
+    socket.on('errorMsg', m => alert(m));
+
+    function openVipModal() { document.getElementById('vip-modal').style.display = 'flex'; }
+    function activateVip() {
+      socket.emit('validateVip', document.getElementById('vip-code-input').value, (v) => {
+        if (v) { isVip = true; localStorage.setItem('domino_vip', 'true'); document.body.classList.add('vip-theme'); document.getElementById('vip-modal').style.display = 'none'; alert('VIP Ativado!'); }
+        else alert('Chave invalida!');
+      });
+    }
+    function createRoom() {
+      socket.emit('createRoom', {
+        playerName: document.getElementById('player-name').value || 'Anfitriao',
+        insta: document.getElementById('player-insta').value,
+        isVip: isVip,
+        gameMode: document.getElementById('game-mode').value,
+        passCost: document.getElementById('pass-cost').value,
+        startChips: parseInt(document.getElementById('start-chips').value) || 500
+      });
+    }
+    function joinRoom() {
+      const code = document.getElementById('join-code').value;
+      if (!code) return alert('Digite o codigo!');
+      socket.emit('joinRoom', { roomCode: code, playerName: document.getElementById('player-name').value || 'Jogador', insta: document.getElementById('player-insta').value, isVip: isVip });
+    }
+    function startGame() { socket.emit('startGame', { roomCode: currentRoom }); }
+    function shareWhatsApp() {
+      const link = window.location.origin + '/?sala=' + currentRoom;
+      window.open('https://wa.me' + encodeURIComponent('Entra na sala ' + currentRoom + ': ' + link), '_blank');
+    }
+
+    socket.on('gameState', (s) => {
+      state = s; currentRoom = s.roomCode;
+      document.getElementById('lobby-screen').style.display = 'none';
+      if (!s.started && !s.roundEnded && s.board.length === 0) {
+        document.getElementById('wait-screen').style.display = 'flex';
+        document.getElementById('display-code').innerText = s.roomCode;
+        document.getElementById('player-list').innerHTML = s.players.map((p, i) => '<div>Assento ' + (i + 1) + ': <strong>' + p.name + '</strong></div>').join('');
+        document.getElementById('btn-start-game').style.display = s.mySeat === 0 ? 'block' : 'none';
+        return;
+      }
+      document.getElementById('wait-screen').style.display = 'none';
+      if (s.roundEnded) {
+        document.getElementById('round-modal').style.display = 'flex';
+        document.getElementById('round-desc').innerText = s.roundSummary;
+        document.getElementById('round-players').innerHTML = s.players.map(p => '<div class="insta-row"><div><strong>' + p.name + '</strong><br><small>Vitorias: ' + p.wins + ' | Fichas: ' + p.chips + '</small></div>' + (p.insta ? '<a class="insta-link" href="https://instagram.com' + p.insta + '" target="_blank">@' + p.insta + '</a>' : '') + '</div>').join('');
+        document.getElementById('btn-next-round').style.display = s.mySeat === 0 ? 'block' : 'none';
+      } else { document.getElementById('round-modal').style.display = 'none'; }
+      renderGame();
+    });
+
+    // Motor Vertical com Pecas Grandes e Curvas em 90 Graus (igual a foto de referencia)
+    function renderVerticalBoard() {
+      const canvas = document.getElementById('board-canvas');
+      canvas.innerHTML = '';
+      if (!state.board || state.board.length === 0) return;
+
+      const boxW = document.getElementById('board-box').clientWidth;
+      const L = 68; // Comprimento grande da peca
+      const S = 34; // Largura grande da peca
+      const gap = 2;
+
+      // Comeca centralizado no topo e desce na vertical (90 graus) com curvas em L
+      let cx = Math.floor(boxW / 2);
+      let cy = 18;
+      let stepCount = 0;
+      let mode = 'down'; // 'down', 'right', 'left'
+
+      state.board.forEach((t, idx) => {
+        const isDouble = t.a === t.b;
+        let w, h, orient, firstVal, secondVal;
+
+        // A cada 4 pecas descendo, faz uma dobra de 90 graus para o lado e volta a descer
+        if (mode === 'down') {
+          if (isDouble) {
+            // Bucha atravessada na horizontal (90 graus cruzando a linha vertical)
+            w = L; h = S; orient = 'horiz';
+            firstVal = t.a; secondVal = t.b;
+          } else {
+            // Peca normal em pe na vertical
+            w = S; h = L; orient = 'vert';
+            firstVal = t.a; secondVal = t.b;
+          }
+
+          const el = document.createElement('div');
+          el.className = 'tile board-tile ' + orient;
+          el.style.width = w + 'px';
+          el.style.height = h + 'px';
+          el.style.left = (cx - Math.floor(w / 2)) + 'px';
+          el.style.top = cy + 'px';
+          el.innerHTML = drawHalf(firstVal) + drawHalf(secondVal);
+          canvas.appendChild(el);
+
+          cy += h + gap;
+          stepCount++;
+
+          // Dobra em 90 graus para evitar linha reta infinita
+          if (stepCount === 4 && idx < state.board.length - 1) {
+            mode = (cx <= boxW / 2) ? 'right' : 'left';
+            stepCount = 0;
+          }
+        } else {
+          // Trecho horizontal de 90 graus (2 pecas para o lado)
+          w = L; h = S; orient = 'horiz';
+          if (mode === 'right') {
+            firstVal = t.a; secondVal = t.b;
+            const drawX = cx - Math.floor(S / 2);
+            const el = document.createElement('div');
+            el.className = 'tile board-tile horiz';
+            el.style.width = w + 'px';
+            el.style.height = h + 'px';
+            el.style.left = drawX + 'px';
+            el.style.top = cy + 'px';
+            el.innerHTML = drawHalf(firstVal) + drawHalf(secondVal);
+            canvas.appendChild(el);
+
+            cx = drawX + w - Math.floor(S / 2);
+            stepCount++;
+            if (stepCount === 2) {
+              cy += h + gap;
+              mode = 'down';
+              stepCount = 0;
+            }
+          } else {
+            firstVal = t.b; secondVal = t.a;
+            const drawX = cx + Math.floor(S / 2) - w;
+            const el = document.createElement('div');
+            el.className = 'tile board-tile horiz';
+            el.style.width = w + 'px';
+            el.style.height = h + 'px';
+            el.style.left = drawX + 'px';
+            el.style.top = cy + 'px';
+            el.innerHTML = drawHalf(firstVal) + drawHalf(secondVal);
+            canvas.appendChild(el);
+
+            cx = drawX + Math.floor(S / 2);
+            stepCount++;
+            if (stepCount === 2) {
+              cy += h + gap;
+              mode = 'down';
+              stepCount = 0;
+            }
+          }
+        }
+      });
+
+      canvas.style.height = (cy + 50) + 'px';
+    }
+
+    function renderGame() {
+      document.getElementById('top-code').innerText = state.roomCode;
+      document.getElementById('top-rule').innerText = state.config.gameMode === 'pass_pay' ? 'Passe: ' + state.config.passCost : 'So Batida';
+      document.getElementById('status').innerText = state.status;
+      const me = state.mySeat;
+      updateSeat('seat-me', me, true); updateSeat('seat-right', (me + 1) % 4, false);
+      updateSeat('seat-top', (me + 2) % 4, false); updateSeat('seat-left', (me + 3) % 4, false);
+
+      renderVerticalBoard();
+
+      const handEl = document.getElementById('hand'); handEl.innerHTML = '';
+      state.myHand.forEach((t, idx) => {
+        const div = document.createElement('div');
+        div.className = 'tile hand'; div.onclick = () => clickTile(idx);
+        div.innerHTML = drawHalf(t.a) + drawHalf(t.b);
+        handEl.appendChild(div);
+      });
+
+      if (state.started && state.currentTurn === me) {
+        const canPlay = state.myHand.some(t => {
+          if (state.board.length === 0) return true;
+          const first = state.board.slice(0, 1).pop(), last = state.board.slice(-1).pop();
+          return t.a === first.a || t.b === first.a || t.a === last.b || t.b === last.b;
+        });
+        document.getElementById('btn-pass').style.display = canPlay ? 'none' : 'block';
+      } else {
+        document.getElementById('btn-pass').style.display = 'none';
+        document.getElementById('side-btns').style.display = 'none';
+      }
+    }
+
+    function updateSeat(elId, seatIdx, isMe) {
+      const p = state.players[seatIdx], el = document.getElementById(elId);
+      el.classList.toggle('active', state.started && state.currentTurn === seatIdx);
+      el.innerHTML = '<strong>' + (p.isVip ? '👑 ' : '') + p.name + '</strong><br>' + (isMe ? '' : 'Pecas: ' + p.handCount + ' | ') + '🏆' + p.wins + ' | 💰' + p.chips;
+    }
+
+    function clickTile(idx) {
+      if (!state.started || state.currentTurn !== state.mySeat) return;
+      const t = state.myHand[idx];
+      if (state.board.length === 0) return socket.emit('playTile', { roomCode: currentRoom, tileIndex: idx, side: 'left' });
+      const first = state.board.slice(0, 1).pop(), last = state.board.slice(-1).pop();
+      const fitL = t.a === first.a || t.b === first.a, fitR = t.a === last.b || t.b === last.b;
+        

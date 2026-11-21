@@ -127,4 +127,186 @@ function startRound(roomCode) {
   broadcastRoomState(roomCode);
   checkBotTurn(roomCode);
         }
+function checkBotTurn(roomCode) {
+  const room = rooms[roomCode];
+  if (!room || !room.started) return;
+  const currentPlayer = room.players[room.currentTurn];
+  if (currentPlayer && currentPlayer.isBot) {
+    const thinkTime = 4000 + Math.floor(Math.random() * 1500);
+    setTimeout(() => {
+      if (!rooms[roomCode] || !rooms[roomCode].started) return;
+      const moves = getValidMoves(room, room.currentTurn);
+      if (moves.length === 0) {
+        processPass(roomCode, room.currentTurn);
+      } else {
+        const firstMove = moves.shift();
+        processMove(roomCode, room.currentTurn, firstMove.idx, firstMove.side);
+      }
+    }, thinkTime);
+  }
+}
+
+function processMove(roomCode, seatIndex, tileIndex, side) {
+  const room = rooms[roomCode];
+  if (!room || !room.started || room.currentTurn !== seatIndex) return;
+  const validMoves = getValidMoves(room, seatIndex);
+  const chosen = validMoves.find(m => m.idx === tileIndex && m.side === side);
+  if (!chosen) {
+    const p = room.players[seatIndex];
+    if (p && p.socketId) io.to(p.socketId).emit('toast', 'Proibido fechar o jogo!');
+    return;
+  }
+  const removed = room.hands[seatIndex].splice(tileIndex, 1);
+  const tile = removed.shift();
+  room.consecutivePasses = 0;
+  if (room.board.length === 0) {
+    room.board.push({ a: tile.a, b: tile.b });
+    room.centerIndex = 0;
+    room.leftEnd = tile.a;
+    room.rightEnd = tile.b;
+  } else if (side === 'left') {
+    if (tile.b === room.leftEnd) {
+      room.board.unshift({ a: tile.a, b: tile.b });
+      room.leftEnd = tile.a;
+    } else {
+      room.board.unshift({ a: tile.b, b: tile.a });
+      room.leftEnd = tile.b;
+    }
+    room.centerIndex++;
+  } else {
+    if (tile.a === room.rightEnd) {
+      room.board.push({ a: tile.a, b: tile.b });
+      room.rightEnd = tile.b;
+    } else {
+      room.board.push({ a: tile.b, b: tile.a });
+      room.rightEnd = tile.a;
+    }
+  }
+  io.to(roomCode).emit('playSound', 'tile');
+  if (room.hands[seatIndex].length === 0) {
+    const prize = room.config.passCost * 4;
+    room.chips[seatIndex] += prize;
+    room.wins[seatIndex] += 1;
+    room.lastWinner = seatIndex;
+    room.started = false;
+    room.roundEnded = true;
+    room.roundSummary = room.players[seatIndex].name + ' BATEU e ganhou +' + prize + ' fichas!';
+    room.status = room.roundSummary;
+    io.to(roomCode).emit('playSound', 'win');
+    broadcastRoomState(roomCode);
+    return;
+  }
+  room.currentTurn = (room.currentTurn + 1) % 4;
+  const nextP = room.players[room.currentTurn];
+  room.status = nextP.isBot ? ('🤔 ' + nextP.name + ' pensando...') : ('Sua vez, ' + nextP.name + '!');
+  broadcastRoomState(roomCode);
+  checkBotTurn(roomCode);
+}
+
+function processPass(roomCode, seatIndex) {
+  const room = rooms[roomCode];
+  if (!room || !room.started || room.currentTurn !== seatIndex) return;
+  const validMoves = getValidMoves(room, seatIndex);
+  if (validMoves.length > 0) return;
+  room.consecutivePasses++;
+  io.to(roomCode).emit('playSound', 'pass');
+  let msg = room.players[seatIndex].name + ' passou!';
+  if (room.config.gameMode === 'pass_pay') {
+    const prevSeat = (seatIndex + 3) % 4;
+    const amount = Math.min(room.chips[seatIndex], room.config.passCost);
+    room.chips[seatIndex] -= amount;
+    room.chips[prevSeat] += amount;
+    msg += ' Pagou ' + amount + '.';
+  }
+  if (room.consecutivePasses >= 4) {
+    let minPts = Infinity;
+    let winner = 0;
+    for (let i = 0; i < 4; i++) {
+      const pts = room.hands[i].reduce((s, t) => s + t.a + t.b, 0);
+      if (pts < minPts) { minPts = pts; winner = i; }
+    }
+    const prize = room.config.passCost * 4;
+    room.chips[winner] += prize;
+    room.wins[winner] += 1;
+    room.lastWinner = winner;
+    room.started = false;
+    room.roundEnded = true;
+    room.roundSummary = 'Jogo Trancado! ' + room.players[winner].name + ' venceu (' + minPts + ' pts)!';
+    room.status = room.roundSummary;
+    io.to(roomCode).emit('playSound', 'win');
+    broadcastRoomState(roomCode);
+    return;
+  }
+  room.currentTurn = (room.currentTurn + 1) % 4;
+  const nextP = room.players[room.currentTurn];
+  room.status = msg + (nextP.isBot ? (' 🤔 ' + nextP.name + ' pensando...') : (' Sua vez!'));
+  broadcastRoomState(roomCode);
+  checkBotTurn(roomCode);
+}
+
+io.on('connection', (socket) => {
+  socket.on('validateVip', (code, callback) => {
+    callback(VALID_VIP_CODES.includes((code || '').trim().toUpperCase()));
+  });
+  socket.on('createRoom', ({ playerName, insta, isVip, gameMode, passCost, startChips }) => {
+    const code = generateRoomCode();
+    const cleanInsta = (insta || '').replace('@', '').trim();
+    rooms[code] = {
+      players: [{ name: playerName || 'Anfitriao', insta: cleanInsta, isVip: !!isVip, socketId: socket.id, isBot: false }, null, null, null],
+      chips: [startChips, startChips, startChips, startChips],
+      wins: new Array(4).fill(0),
+      lastWinner: null,
+      hands: [[], [], [], []],
+      board: [], centerIndex: 0, leftEnd: null, rightEnd: null,
+      currentTurn: 0, consecutivePasses: 0,
+      started: false, roundEnded: false, roundSummary: '',
+      status: 'Sala ' + code + ' criada!',
+      config: { gameMode, passCost: parseInt(passCost) || 10 }
+    };
+    socket.join(code);
+    broadcastRoomState(code);
+  });
+  socket.on('joinRoom', ({ roomCode, playerName, insta, isVip }) => {
+    const code = (roomCode || '').toUpperCase().trim();
+    const room = rooms[code];
+    if (!room) return socket.emit('errorMsg', 'Sala nao encontrada!');
+    const emptySeat = room.players.findIndex(p => p === null);
+    if (emptySeat === -1) return socket.emit('errorMsg', 'Mesa cheia!');
+    const cleanInsta = (insta || '').replace('@', '').trim();
+    room.players[emptySeat] = { name: playerName || 'Jogador', insta: cleanInsta, isVip: !!isVip, socketId: socket.id, isBot: false };
+    socket.join(code);
+    room.status = playerName + ' sentou na mesa!';
+    broadcastRoomState(code);
+  });
+  socket.on('startGame', ({ roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    for (let i = 0; i < 4; i++) {
+      if (room.players[i] === null) room.players[i] = { name: 'Bot ' + (i + 1), insta: '', isVip: false, socketId: null, isBot: true };
+    }
+    startRound(roomCode);
+  });
+  socket.on('playTile', ({ roomCode, tileIndex, side }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    const seat = room.players.findIndex(p => p && p.socketId === socket.id);
+    if (seat !== -1) processMove(roomCode, seat, tileIndex, side);
+  });
+  socket.on('passTurn', ({ roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    const seat = room.players.findIndex(p => p && p.socketId === socket.id);
+    if (seat !== -1) processPass(roomCode, seat);
+  });
+  socket.on('quickEmoji', ({ roomCode, emoji }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    const seat = room.players.findIndex(p => p && p.socketId === socket.id);
+    if (seat !== -1) io.to(roomCode).emit('showEmoji', { name: room.players[seat].name, emoji });
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log('Servidor online na porta ' + PORT));
+
 

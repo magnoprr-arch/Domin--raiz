@@ -76,4 +76,168 @@
       <button class="btn-vip" id="btn-open-vip" onclick="openVipModal()">Seja Dono da Mesa (VIP)</button>
     </div>
   </div>
-  
+    <div id="vip-modal" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Passe de Dono (Vitalicio)</h2>
+      <p style="font-size:13px; color:#cbd5e1;">Mesa Azul, Pedras Douradas, Coroa VIP e Zero Anuncios!</p>
+      <a href="https://mpago.la" target="_blank"><button class="btn-green">Adquirir Chave VIP (R$ 9,90)</button></a>
+      <hr style="border-color:#334155; margin: 12px 0;">
+      <input type="text" id="vip-code-input" placeholder="Digite sua chave (Ex: DONO2026)" style="text-transform:uppercase;" />
+      <button class="btn-yellow" onclick="activateVip()">Ativar Minha Chave</button>
+      <button style="background:#334155; color:#fff;" onclick="document.getElementById('vip-modal').style.display='none'">Voltar</button>
+    </div>
+  </div>
+  <div id="wait-screen" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Sala: <span id="display-code" style="color:#fff;">----</span></h2>
+      <button class="btn-whatsapp" onclick="shareWhatsApp()">Desafiar no WhatsApp</button>
+      <div id="player-list" style="text-align:left; background:#0f172a; padding:10px; border-radius:8px; margin:12px 0; font-size:14px;"></div>
+      <button id="btn-start-game" class="btn-green" onclick="startGame()">Iniciar Partida</button>
+    </div>
+  </div>
+  <div id="round-modal" class="screen" style="display:none;">
+    <div class="box">
+      <h2>Fim da Rodada!</h2>
+      <p id="round-desc" style="text-align:center; font-size:14px; color:#fde047;"></p>
+      <div id="round-players"></div>
+      <button class="btn-whatsapp" style="margin-top:10px;" onclick="shareResultWhatsApp()">Zoar no WhatsApp</button>
+      <button id="btn-next-round" class="btn-yellow" onclick="startGame()">Proxima Rodada</button>
+    </div>
+  </div>
+  <div id="top-bar">
+    <div>Sala: <strong id="top-code">----</strong></div>
+    <div id="top-rule" style="color:#fde047;"></div>
+  </div>
+  <div id="game-area">
+    <div id="seat-top" class="player-badge" style="align-self:center;"></div>
+    <div class="mid-row">
+      <div id="seat-left" class="player-badge"></div>
+      <div id="board-box"><div id="status">Aguardando...</div><div id="board"></div></div>
+      <div id="seat-right" class="player-badge"></div>
+    </div>
+    <div id="hand-area">
+      <div style="display:flex; justify-content:space-between; width:100%; max-width:500px; align-items:center;">
+        <div id="seat-me" class="player-badge"></div>
+        <div class="reactions">
+          <button class="react-btn" onclick="sendEmoji('😂')">😂</button>
+          <button class="react-btn" onclick="sendEmoji('🔥')">🔥</button>
+          <button class="react-btn" onclick="sendEmoji('😭 Passou!')">😭</button>
+          <button class="react-btn" onclick="sendEmoji('👀 Tranca nao!')">👀</button>
+        </div>
+        <button id="btn-pass" style="display:none; background:#dc2626; color:#fff; width:auto; padding:6px 12px; margin:0;" onclick="passTurn()">Passar</button>
+      </div>
+      <div id="side-btns" style="display:none; gap:8px; width:100%; max-width:300px;">
+        <button class="btn-blue" style="padding:7px; margin:0;" onclick="confirmSide('left')">Esquerda</button>
+        <button class="btn-blue" style="padding:7px; margin:0;" onclick="confirmSide('right')">Direita</button>
+      </div>
+      <div id="hand"></div>
+    </div>
+  </div>
+  <script>
+    const socket = io();
+    let currentRoom = '', state = null, selectedIdx = null;
+    let isVip = localStorage.getItem('domino_vip') === 'true';
+    if (isVip) applyVipUI();
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('sala')) document.getElementById('join-code').value = urlParams.get('sala').toUpperCase();
+
+    function playSoundEffect(type) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        if (type === 'tile') {
+          osc.type = 'triangle'; osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+          osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+        } else if (type === 'pass') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        } else if (type === 'win') {
+          osc.type = 'square'; osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        }
+      } catch(e) {}
+    }
+    socket.on('playSound', t => playSoundEffect(t));
+    socket.on('toast', m => { const e = document.getElementById('emoji-toast'); e.innerText = m; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); });
+    socket.on('showEmoji', ({ name, emoji }) => { const e = document.getElementById('emoji-toast'); e.innerText = name + ': ' + emoji; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2000); });
+
+    function openVipModal() { document.getElementById('vip-modal').style.display = 'flex'; }
+    function activateVip() {
+      socket.emit('validateVip', document.getElementById('vip-code-input').value, (v) => {
+        if (v) { isVip = true; localStorage.setItem('domino_vip', 'true'); applyVipUI(); document.getElementById('vip-modal').style.display = 'none'; alert('Modo VIP Ativado!'); }
+        else alert('Codigo invalido!');
+      });
+    }
+    function applyVipUI() { document.body.classList.add('vip-theme'); document.getElementById('btn-open-vip').innerText = 'Modo Dono VIP Ativo!'; }
+
+    function createRoom() {
+      socket.emit('createRoom', {
+        playerName: document.getElementById('player-name').value || 'Anfitriao',
+        insta: document.getElementById('player-insta').value,
+        isVip: isVip,
+        gameMode: document.getElementById('game-mode').value,
+        passCost: document.getElementById('pass-cost').value,
+        startChips: parseInt(document.getElementById('start-chips').value) || 500
+      });
+    }
+    function joinRoom() {
+      const code = document.getElementById('join-code').value;
+      if (!code) return alert('Digite o codigo!');
+      socket.emit('joinRoom', { roomCode: code, playerName: document.getElementById('player-name').value || 'Jogador', insta: document.getElementById('player-insta').value, isVip: isVip });
+    }
+    function startGame() { socket.emit('startGame', { roomCode: currentRoom }); }
+    function shareWhatsApp() {
+      const link = window.location.origin + '/?sala=' + currentRoom;
+      window.open('https://wa.me' + encodeURIComponent('Entra na minha mesa de Domino (Sala ' + currentRoom + '): ' + link), '_blank');
+    }
+    function shareResultWhatsApp() {
+      const r = state.players.map(p => p.name + ': ' + p.wins + ' vitorias').join('\n');
+      window.open('https://wa.me' + encodeURIComponent('Placar Domino:\n' + r + '\nJogue: ' + window.location.origin), '_blank');
+    }
+    function sendEmoji(emoji) { socket.emit('quickEmoji', { roomCode: currentRoom, emoji }); }
+    socket.on('errorMsg', m => alert(m));
+
+    socket.on('gameState', (s) => {
+      state = s; currentRoom = s.roomCode;
+      document.getElementById('lobby-screen').style.display = 'none';
+      if (!s.started && !s.roundEnded && s.board.length === 0) {
+        document.getElementById('wait-screen').style.display = 'flex';
+        document.getElementById('display-code').innerText = s.roomCode;
+        document.getElementById('player-list').innerHTML = s.players.map((p, i) => '<div>Assento ' + (i + 1) + ': <strong>' + p.name + '</strong></div>').join('');
+        document.getElementById('btn-start-game').style.display = s.mySeat === 0 ? 'block' : 'none';
+        return;
+      }
+      document.getElementById('wait-screen').style.display = 'none';
+      if (s.roundEnded) {
+        document.getElementById('round-modal').style.display = 'flex';
+        document.getElementById('round-desc').innerText = s.roundSummary;
+        document.getElementById('round-players').innerHTML = s.players.map(p => '<div class="insta-row"><div><strong>' + p.name + '</strong><br><small>Vitorias: ' + p.wins + ' | Fichas: ' + p.chips + '</small></div>' + (p.insta ? '<a class="insta-link" href="https://instagram.com' + p.insta + '" target="_blank">@' + p.insta + '</a>' : '') + '</div>').join('');
+        document.getElementById('btn-next-round').style.display = s.mySeat === 0 ? 'block' : 'none';
+      } else { document.getElementById('round-modal').style.display = 'none'; }
+      renderGame();
+    });
+
+    function renderGame() {
+      document.getElementById('top-code').innerText = state.roomCode;
+      document.getElementById('top-rule').innerText = state.config.gameMode === 'pass_pay' ? 'Passe: ' + state.config.passCost : 'So Batida';
+      document.getElementById('status').innerText = state.status;
+      const me = state.mySeat;
+      updateSeat('seat-me', me, true); updateSeat('seat-right', (me + 1) % 4, false);
+      updateSeat('seat-top', (me + 2) % 4, false); updateSeat('seat-left', (me + 3) % 4, false);
+
+      const boardEl = document.getElementById('board'); boardEl.innerHTML = '';
+      state.board.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'tile h ' + (t.a === t.b ? 'double' : '');
+        div.innerHTML = '<div class="half">' + t.a + '</div><div class="half">' + t.b + '</div>';
+        boardEl.appendChild(div);
+      });
+
+      const handEl = document.getElementById('hand'); handEl.innerHTML = '';
+    

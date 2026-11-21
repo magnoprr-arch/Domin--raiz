@@ -109,7 +109,7 @@
       <p style="font-size:13px; color:#cbd5e1; margin-top:0;">Curtiu o Domino Raiz? Qualquer valor via Pix ajuda a manter o servidor online e trazer novidades!</p>
       <div class="pix-box">
         <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">CHAVE PIX:</div>
-        <strong id="pix-key-text">SUA-CHAVE-PIX-AQUI</strong>
+        <strong id="pix-key-text">61991282555</strong>
       </div>
       <button class="btn-green" onclick="copyPixKey()">📋 Copiar Chave Pix</button>
       <button style="background:#334155; color:#fff;" onclick="document.getElementById('donate-modal').style.display='none'">Voltar ao Jogo</button>
@@ -315,4 +315,188 @@
       const link = window.location.origin + '/?sala=' + currentRoom;
       navigator.clipboard.writeText(link).then(() => alert('Link copiado! Cole no WhatsApp dos amigos.'));
     }
-          
+            socket.on('gameState', s => {
+      state = s; currentRoom = s.roomCode;
+      document.getElementById('lobby-screen').style.display = 'none';
+      if (!s.started && !s.roundEnded && s.board.length === 0) {
+        document.getElementById('wait-screen').style.display = 'flex';
+        document.getElementById('display-code').innerText = s.roomCode;
+        document.getElementById('player-list').innerHTML = s.players.map((p, i) => '<div>' + AVATARS[i] + ' Assento ' + (i + 1) + ': <strong>' + p.name + '</strong></div>').join('');
+        document.getElementById('btn-start-game').style.display = s.mySeat === 0 ? 'block' : 'none';
+        return;
+      }
+      document.getElementById('wait-screen').style.display = 'none';
+      if (s.roundEnded) {
+        document.getElementById('round-modal').style.display = 'flex';
+        const meObj = s.players[s.mySeat];
+        if (userProfile) {
+          userProfile.chips = meObj.chips;
+          userProfile.wins = meObj.wins;
+          localStorage.setItem('domino_profile', JSON.stringify(userProfile));
+        }
+        const iWon = s.roundSummary.includes(meObj.name);
+        const banner = document.getElementById('end-banner');
+        if (iWon) {
+          banner.className = 'end-banner end-win';
+          banner.innerHTML = '🏆 PARABENS, ' + meObj.name.toUpperCase() + '!<br><small>Voce venceu a rodada!</small>';
+          launchConfetti();
+        } else {
+          banner.className = 'end-banner end-lose';
+          banner.innerHTML = '😅 MAIS SORTE NA PROXIMA!<br><small>Nao foi dessa vez, tente na proxima!</small>';
+        }
+        document.getElementById('round-desc').innerText = s.roundSummary;
+        document.getElementById('round-players').innerHTML = s.players.map((p, i) => '<div class="insta-row"><div>' + AVATARS[i] + ' <strong>' + p.name + '</strong><br><small>Vitorias: ' + p.wins + ' | Fichas: ' + p.chips + '</small></div>' + (p.insta ? '<a class="insta-link" href="https://instagram.com' + p.insta + '" target="_blank">@' + p.insta + '</a>' : '') + '</div>').join('');
+        document.getElementById('btn-next-round').style.display = s.mySeat === 0 ? 'block' : 'none';
+      } else document.getElementById('round-modal').style.display = 'none';
+      renderGame();
+    });
+
+    function renderVerticalBoard() {
+      const canvas = document.getElementById('board-canvas');
+      canvas.innerHTML = '';
+      if (!state.board || !state.board.length) return;
+
+      const box = document.getElementById('board-box');
+      const boxW = box.clientWidth;
+      const boxH = box.clientHeight;
+
+      const scale = state.board.length > 18 ? 0.72 : (state.board.length > 12 ? 0.85 : 1.0);
+      const L = Math.floor(62 * scale);
+      const S = Math.floor(31 * scale);
+      const gap = 2;
+
+      const centerIdx = state.centerIndex || 0;
+      const centerTile = state.board[centerIdx];
+      const cDbl = centerTile.a === centerTile.b;
+      const cw = cDbl ? L : S;
+      const ch = cDbl ? S : L;
+
+      const startX = Math.floor(boxW / 2);
+      const startY = Math.floor(boxH / 2) + 22;
+
+      const cEl = document.createElement('div');
+      cEl.className = 'tile board-tile ' + (cDbl ? 'horiz' : 'vert');
+      cEl.style.cssText = 'width:' + cw + 'px;height:' + ch + 'px;left:' + (startX - Math.floor(cw / 2)) + 'px;top:' + (startY - Math.floor(ch / 2)) + 'px;';
+      cEl.innerHTML = drawHalf(centerTile.a, cDbl) + drawHalf(centerTile.b, cDbl);
+      canvas.appendChild(cEl);
+
+      let bx = startX, by = startY + Math.floor(ch / 2) + gap, bDir = 'down';
+      for (let i = centerIdx + 1; i < state.board.length; i++) {
+        const t = state.board[i], dbl = t.a === t.b;
+        let w, h, ori, v1, v2, x, y;
+        if (bDir === 'down') {
+          w = dbl ? L : S; h = dbl ? S : L; ori = dbl ? 'horiz' : 'vert';
+          v1 = t.a; v2 = t.b; x = bx - Math.floor(w / 2); y = by;
+          by += h + gap;
+          if (by + L > boxH - 12 && i < state.board.length - 1) bDir = 'right';
+        } else if (bDir === 'right') {
+          w = L; h = S; ori = 'horiz'; v1 = t.a; v2 = t.b;
+          x = bx - Math.floor(S / 2); y = by; bx = x + w + gap;
+          if (bx + L > boxW - 84 && i < state.board.length - 1) {
+            bDir = 'up'; bx = x + w - Math.floor(S / 2); by = y - gap;
+          }
+        } else if (bDir === 'up') {
+          w = dbl ? L : S; h = dbl ? S : L; ori = dbl ? 'horiz' : 'vert';
+          v1 = t.b; v2 = t.a; by -= h; x = bx - Math.floor(w / 2); y = by;
+          by -= gap;
+          if (by - L < 92 && i < state.board.length - 1) {
+            bDir = 'leftTop'; bx = x - gap;
+          }
+        } else {
+          w = L; h = S; ori = 'horiz'; v1 = t.b; v2 = t.a;
+          x = bx - w; y = by; bx = x - gap;
+        }
+        const el = document.createElement('div');
+        el.className = 'tile board-tile ' + ori;
+        el.style.cssText = 'width:' + w + 'px;height:' + h + 'px;left:' + x + 'px;top:' + y + 'px;';
+        el.innerHTML = drawHalf(v1, ori === 'horiz') + drawHalf(v2, ori === 'horiz');
+        canvas.appendChild(el);
+      }
+
+      let tx = startX, ty = startY - Math.floor(ch / 2) - gap, tDir = 'up';
+      for (let i = centerIdx - 1; i >= 0; i--) {
+        const t = state.board[i], dbl = t.a === t.b;
+        let w, h, ori, v1, v2, x, y;
+        if (tDir === 'up') {
+          w = dbl ? L : S; h = dbl ? S : L; ori = dbl ? 'horiz' : 'vert';
+          v1 = t.a; v2 = t.b; ty -= h; x = tx - Math.floor(w / 2); y = ty;
+          ty -= gap;
+          if (ty - L < 92 && i > 0) tDir = 'left';
+        } else if (tDir === 'left') {
+          w = L; h = S; ori = 'horiz'; v1 = t.a; v2 = t.b;
+          x = tx + Math.floor(S / 2) - w; y = ty - S; tx = x - gap;
+          if (tx - L < 84 && i > 0) {
+            tDir = 'down'; tx = x + Math.floor(S / 2); ty = y + S + gap;
+          }
+        } else {
+          w = dbl ? L : S; h = dbl ? S : L; ori = dbl ? 'horiz' : 'vert';
+          v1 = t.b; v2 = t.a; x = tx - Math.floor(w / 2); y = ty;
+          ty += h + gap;
+        }
+        const el = document.createElement('div');
+        el.className = 'tile board-tile ' + ori;
+        el.style.cssText = 'width:' + w + 'px;height:' + h + 'px;left:' + x + 'px;top:' + y + 'px;';
+        el.innerHTML = drawHalf(v1, ori === 'horiz') + drawHalf(v2, ori === 'horiz');
+        canvas.appendChild(el);
+      }
+    }
+
+    function renderGame() {
+      document.getElementById('top-code').innerText = state.roomCode;
+      document.getElementById('top-rule').innerText = state.config.gameMode === 'pass_pay' ? 'Passe: ' + state.config.passCost : 'So Batida';
+      document.getElementById('status').innerText = state.status;
+      const me = state.mySeat;
+      updateSeat('seat-me', me, true);
+      updateSeat('seat-right', (me + 1) % 4, false);
+      updateSeat('seat-top', (me + 2) % 4, false);
+      updateSeat('seat-left', (me + 3) % 4, false);
+      renderVerticalBoard();
+
+      const handEl = document.getElementById('hand'); handEl.innerHTML = '';
+      state.myHand.forEach((t, idx) => {
+        const div = document.createElement('div');
+        div.className = 'tile hand'; div.onclick = () => clickTile(idx);
+        div.innerHTML = drawHalf(t.a, false) + drawHalf(t.b, false);
+        handEl.appendChild(div);
+      });
+
+      if (state.started && state.currentTurn === me) {
+        const canPlay = state.myHand.some(t => {
+          if (!state.board.length) return true;
+          const f = state.board.slice(0, 1).pop(), l = state.board.slice(-1).pop();
+          return t.a === f.a || t.b === f.a || t.a === l.b || t.b === l.b;
+        });
+        document.getElementById('btn-pass').style.display = canPlay ? 'none' : 'block';
+      } else {
+        document.getElementById('btn-pass').style.display = 'none';
+        document.getElementById('side-btns').style.display = 'none';
+      }
+    }
+
+    function updateSeat(id, idx, me) {
+      const p = state.players[idx], el = document.getElementById(id);
+      el.classList.toggle('active', state.started && state.currentTurn === idx);
+      const face = '<span class="avatar-face">' + AVATARS[idx % 4] + '</span>';
+      if (me) {
+        el.innerHTML = face + '<div><strong>' + (p.isVip ? '👑 ' : '') + p.name + '</strong><br>🏆' + p.wins + ' 💰' + p.chips + '</div>';
+      } else {
+        el.innerHTML = face + '<strong>' + (p.isVip ? '👑 ' : '') + p.name + '</strong><br>🁣 ' + p.handCount + ' | 🏆' + p.wins;
+      }
+    }
+
+    function clickTile(idx) {
+      if (!state.started || state.currentTurn !== state.mySeat) return;
+      const t = state.myHand[idx];
+      if (!state.board.length) return socket.emit('playTile', { roomCode: currentRoom, tileIndex: idx, side: 'left' });
+      const f = state.board.slice(0, 1).pop(), l = state.board.slice(-1).pop();
+      const fitL = t.a === f.a || t.b === f.a, fitR = t.a === l.b || t.b === l.b;
+      if (!fitL && !fitR) return;
+      if (fitL && fitR && f.a !== l.b) { selectedIdx = idx; document.getElementById('side-btns').style.display = 'flex'; }
+      else socket.emit('playTile', { roomCode: currentRoom, tileIndex: idx, side: fitL ? 'left' : 'right' });
+    }
+    function confirmSide(side) { document.getElementById('side-btns').style.display = 'none'; socket.emit('playTile', { roomCode: currentRoom, tileIndex: selectedIdx, side }); }
+    function passTurn() { socket.emit('passTurn', { roomCode: currentRoom }); }
+  </script>
+</body>
+</html>
+

@@ -1,1 +1,79 @@
-
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Dominó Raiz Online</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f3d21" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: #14532d; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    body.vip-theme { background: #1e3a8a; }
+    body.vip-theme #top-bar, body.vip-theme #hand-area { background: #172554; }
+    body.vip-theme #board-box { background: #1d4ed8; }
+    .screen { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 15px; overflow-y: auto; }
+    .box { background: #1e293b; padding: 20px; border-radius: 14px; width: 100%; max-width: 390px; border: 1px solid #334155; }
+    h2 { margin: 0 0 12px 0; color: #facc15; text-align: center; font-size: 22px; }
+    input, select { width: 100%; padding: 11px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 8px; }
+    .btn-yellow { background: #eab308; color: #000; }
+    .btn-blue { background: #2563eb; color: #fff; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-whatsapp { background: #25D366; color: #000; }
+    .btn-vip { background: linear-gradient(45deg, #f59e0b, #fbbf24); color: #000; }
+    #top-bar { background: #0f3d21; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+    #game-area { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 8px; }
+    .player-badge { background: #00000077; padding: 5px 9px; border-radius: 8px; text-align: center; font-size: 11px; border: 2px solid transparent; min-width: 82px; }
+    .player-badge.active { border-color: #facc15; background: #000000cc; }
+    .mid-row { display: flex; justify-content: space-between; align-items: center; flex: 1; margin: 6px 0; gap: 6px; }
+    #board-box { flex: 1; height: 100%; background: #166534; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; position: relative; overflow-y: auto; }
+    #status { position: absolute; top: 6px; background: #000000aa; padding: 4px 12px; border-radius: 15px; font-size: 12px; color: #fde047; text-align: center; max-width: 95%; z-index: 5; }
+    #board { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; align-items: center; margin-top: 28px; }
+    .tile { background: #f8fafc; color: #0f172a; border-radius: 5px; border: 2px solid #94a3b8; display: flex; font-weight: bold; user-select: none; }
+    body.vip-theme .tile { background: #fef9c3; border-color: #ca8a04; }
+    .tile.h { width: 46px; height: 23px; flex-direction: row; }
+    .tile.h.double { width: 23px; height: 46px; flex-direction: column; }
+    .tile.h .half:first-child { border-right: 1px solid #cbd5e1; }
+    .tile.h.double .half:first-child { border-right: none; border-bottom: 1px solid #cbd5e1; }
+    .tile .half { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    #hand-area { background: #0f3d21; padding: 8px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    #hand { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    .tile.hand { width: 38px; height: 74px; flex-direction: column; cursor: pointer; }
+    .tile.hand .half:first-child { border-bottom: 2px solid #cbd5e1; }
+    .tile.hand .half { font-size: 17px; }
+    .reactions { display: flex; gap: 6px; }
+    .react-btn { background: #ffffff22; color: #fff; border: none; border-radius: 20px; padding: 4px 9px; font-size: 13px; width: auto; margin: 0; }
+    #emoji-toast { position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%); background: #000000dd; color: #fff; padding: 10px 20px; border-radius: 30px; font-size: 18px; display: none; z-index: 80; border: 1px solid #facc15; }
+    .insta-row { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 14px; }
+    .insta-link { background: #e1306c; color: #fff; text-decoration: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="emoji-toast"></div>
+  <div id="lobby-screen" class="screen">
+    <div class="box">
+      <h2>Domino Raiz Online</h2>
+      <input type="text" id="player-name" placeholder="Seu Apelido" maxlength="12" />
+      <input type="text" id="player-insta" placeholder="Seu @instagram (opcional)" maxlength="25" />
+      <label style="font-size:12px; color:#94a3b8;">Entrar em Sala:</label>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="join-code" placeholder="Codigo (Ex: A1B2)" style="text-transform:uppercase;" maxlength="4" />
+        <button class="btn-blue" style="width:45%;" onclick="joinRoom()">Entrar</button>
+      </div>
+      <hr style="border-color:#334155; margin: 10px 0;">
+      <label style="font-size:12px; color:#94a3b8;">Ou Criar Nova Mesa:</label>
+      <select id="game-mode">
+        <option value="pass_pay">Passe Paga + Batida</option>
+        <option value="only_win">Apenas Batida</option>
+      </select>
+      <div style="display:flex; gap:6px;">
+        <input type="number" id="pass-cost" value="10" placeholder="Valor Passe" />
+        <input type="number" id="start-chips" value="500" placeholder="Fichas Iniciais" />
+      </div>
+      <button class="btn-yellow" onclick="createRoom()">Criar Sala Privada</button>
+      <button class="btn-vip" id="btn-open-vip" onclick="openVipModal()">Seja Dono da Mesa (VIP)</button>
+    </div>
+  </div>
+  

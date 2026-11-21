@@ -1,1 +1,51 @@
-
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Domino Raiz Online</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: #14532d; color: #fff; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    body.vip-theme { background: #1e3a8a; }
+    .screen { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 15px; }
+    .box { background: #1e293b; padding: 20px; border-radius: 14px; width: 100%; max-width: 380px; border: 1px solid #334155; }
+    h2 { margin: 0 0 12px 0; color: #facc15; text-align: center; }
+    input, select { width: 100%; padding: 11px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 8px; font-size: 15px; }
+    .btn-yellow { background: #eab308; color: #000; }
+    .btn-blue { background: #2563eb; color: #fff; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-whatsapp { background: #25D366; color: #000; }
+    .btn-vip { background: #fbbf24; color: #000; }
+    #top-bar { background: #0f3d21; padding: 6px 12px; display: flex; justify-content: space-between; font-size: 12px; flex-shrink: 0; }
+    #game-area { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 6px; min-height: 0; gap: 6px; }
+    .opponents-row { display: flex; justify-content: space-between; gap: 4px; flex-shrink: 0; }
+    .player-badge { flex: 1; background: #00000088; padding: 4px 6px; border-radius: 8px; text-align: center; font-size: 11px; border: 2px solid transparent; }
+    .player-badge.active { border-color: #facc15; box-shadow: 0 0 8px #facc15; background: #000000cc; }
+    #board-box { flex: 1; width: 100%; background: #166534; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding: 8px; position: relative; overflow-y: auto; border: 2px solid #15803d; min-height: 0; }
+    #status { background: #000000bb; padding: 4px 12px; border-radius: 12px; font-size: 12px; color: #fde047; text-align: center; margin-bottom: 8px; flex-shrink: 0; }
+    #board { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+    .board-row { display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%; }
+    .board-row.reverse { flex-direction: row-reverse; }
+    .tile { background: #fdfbf7; border-radius: 5px; border: 2px solid #94a3b8; display: flex; box-shadow: 1px 2px 4px rgba(0,0,0,0.5); user-select: none; flex-shrink: 0; }
+    body.vip-theme .tile { background: #fef08a; border-color: #b45309; }
+    .tile.h { width: 54px; height: 27px; flex-direction: row; }
+    .tile.h.double { width: 27px; height: 42px; flex-direction: column; border-color: #eab308; }
+    .tile.h .half:first-child { border-right: 1.5px solid #64748b; }
+    .tile.h.double .half:first-child { border-right: none; border-bottom: 1.5px solid #64748b; }
+    .tile.hand { width: 42px; height: 82px; flex-direction: column; cursor: pointer; }
+    .tile.hand:active { transform: translateY(-6px); border-color: #facc15; }
+    .tile.hand .half:first-child { border-bottom: 2px solid #64748b; }
+    .half { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); padding: 2px; place-items: center; }
+    .dot { width: 5.5px; height: 5.5px; background: #0f172a; border-radius: 50%; }
+    .tile.h .dot { width: 4px; height: 4px; }
+    #hand-area { background: #0f3d21; padding: 8px 6px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+    #hand { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; width: 100%; }
+    #emoji-toast { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); background: #000000dd; padding: 10px 20px; border-radius: 20px; display: none; z-index: 80; }
+    .insta-row { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px; border-radius: 8px; margin-bottom: 6px; }
+    .insta-link { background: #e1306c; color: #fff; text-decoration: none; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+  </style>
+</head>
+  

@@ -168,4 +168,151 @@
       <div id="hand"></div>
     </div>
   </div>
-    
+      <script>
+    const socket = io();
+    let currentRoom = '', state = null, selectedIdx = null;
+    let isVip = localStorage.getItem('domino_vip') === 'true';
+    if (isVip) document.body.classList.add('vip-theme');
+
+    let userProfile = JSON.parse(localStorage.getItem('domino_profile') || 'null');
+    function loadSavedAccount() {
+      if (userProfile && userProfile.name) {
+        document.getElementById('player-name').value = userProfile.name;
+        document.getElementById('player-insta').value = userProfile.insta || '';
+        document.getElementById('saved-account-bar').style.display = 'flex';
+        document.getElementById('account-inputs').style.display = 'none';
+        document.getElementById('acc-name').innerText = '😎 ' + userProfile.name + (userProfile.insta ? ' (@' + userProfile.insta + ')' : '');
+        document.getElementById('acc-stats').innerText = '🏆 Vitorias: ' + (userProfile.wins || 0) + ' | 💰 Banco: ' + (userProfile.chips || 500);
+        document.getElementById('start-chips').value = userProfile.chips || 500;
+      }
+    }
+    function editAccount() {
+      document.getElementById('saved-account-bar').style.display = 'none';
+      document.getElementById('account-inputs').style.display = 'block';
+    }
+    function saveAccount() {
+      const name = (document.getElementById('player-name').value || '').trim() || 'Jogador';
+      const insta = (document.getElementById('player-insta').value || '').replace('@', '').trim();
+      userProfile = {
+        name: name,
+        insta: insta,
+        wins: userProfile ? (userProfile.wins || 0) : 0,
+        chips: userProfile ? (userProfile.chips || 500) : (parseInt(document.getElementById('start-chips').value) || 500)
+      };
+      localStorage.setItem('domino_profile', JSON.stringify(userProfile));
+    }
+    loadSavedAccount();
+
+    function openDonateModal() { document.getElementById('donate-modal').style.display = 'flex'; }
+    function copyPixKey() {
+      const pix = document.getElementById('pix-key-text').innerText;
+      navigator.clipboard.writeText(pix).then(() => alert('Chave Pix copiada! Agora e so colar no app do seu banco. Obrigado pelo apoio!'));
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('sala')) document.getElementById('join-code').value = urlParams.get('sala').toUpperCase();
+
+    const AVATARS = ['😎', '🧔', '🤠', '👵'];
+    const PIPS_VERT = { 0: '', 1: '5', 2: '19', 3: '159', 4: '1379', 5: '13579', 6: '134679' };
+    const PIPS_HORIZ = { 0: '', 1: '5', 2: '37', 3: '357', 4: '1379', 5: '13579', 6: '123789' };
+
+    setInterval(() => {
+      const pill = document.getElementById('timer-pill');
+      if (!state || !state.started || !state.turnDeadline) {
+        pill.innerText = '⏱ --';
+        pill.classList.remove('urgent');
+        return;
+      }
+      const left = Math.max(0, Math.ceil((state.turnDeadline - Date.now()) / 1000));
+      pill.innerText = '⏱ ' + left + 's';
+      pill.classList.toggle('urgent', left <= 3);
+    }, 250);
+
+    function drawHalf(n, isHoriz) {
+      let c = '', a = (isHoriz ? PIPS_HORIZ[n] : PIPS_VERT[n]) || '';
+      for (let i = 1; i <= 9; i++) c += a.includes(String(i)) ? '<span class="dot"></span>' : '<span></span>';
+      return '<div class="half">' + c + '</div>';
+    }
+
+    function playSoundEffect(type) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AC();
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        if (type === 'tile') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.09);
+          gain.gain.setValueAtTime(0.6, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+          osc.start(); osc.stop(ctx.currentTime + 0.09);
+        } else if (type === 'pass') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(240, ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(140, ctx.currentTime + 0.22);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          osc.start(); osc.stop(ctx.currentTime + 0.22);
+        } else if (type === 'win') {
+          osc.type = 'triangle'; osc.frequency.setValueAtTime(523, ctx.currentTime);
+          osc.frequency.setValueAtTime(659, ctx.currentTime + 0.12);
+          osc.frequency.setValueAtTime(784, ctx.currentTime + 0.24);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start(); osc.stop(ctx.currentTime + 0.45);
+        }
+      } catch(e) {}
+    }
+
+    function launchConfetti() {
+      const colors = ['#facc15', '#22c55e', '#3b82f6', '#ef4444', '#a855f7'];
+      for (let i = 0; i < 35; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.left = Math.random() * 100 + 'vw';
+        c.style.background = colors[i % colors.length];
+        c.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+        document.body.appendChild(c);
+        setTimeout(() => c.remove(), 3500);
+      }
+    }
+
+    socket.on('playSound', t => playSoundEffect(t));
+    socket.on('toast', m => { const e = document.getElementById('emoji-toast'); e.innerText = m; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2500); });
+    socket.on('errorMsg', m => alert(m));
+
+    function openVipModal() { document.getElementById('vip-modal').style.display = 'flex'; }
+    function activateVip() {
+      socket.emit('validateVip', document.getElementById('vip-code-input').value, v => {
+        if (v) { isVip = true; localStorage.setItem('domino_vip', 'true'); document.body.classList.add('vip-theme'); document.getElementById('vip-modal').style.display = 'none'; alert('VIP Ativado!'); }
+        else alert('Chave invalida!');
+      });
+    }
+    function createRoom() {
+      saveAccount();
+      playSoundEffect('tile');
+      socket.emit('createRoom', {
+        playerName: userProfile.name,
+        insta: userProfile.insta,
+        isVip, gameMode: document.getElementById('game-mode').value,
+        passCost: document.getElementById('pass-cost').value,
+        startChips: parseInt(document.getElementById('start-chips').value) || 500
+      });
+    }
+    function joinRoom() {
+      const code = document.getElementById('join-code').value;
+      if (!code) return alert('Digite o codigo!');
+      saveAccount();
+      playSoundEffect('tile');
+      socket.emit('joinRoom', { roomCode: code, playerName: userProfile.name, insta: userProfile.insta, isVip });
+    }
+    function startGame() { socket.emit('startGame', { roomCode: currentRoom }); }
+
+    function shareWhatsApp() {
+      const link = window.location.origin + '/?sala=' + currentRoom;
+      const msg = 'Vem jogar Domino Raiz comigo! Entra direto na Sala ' + currentRoom + ': ' + link;
+      window.location.href = 'https://whatsapp.com' + encodeURIComponent(msg);
+    }
+    function copyRoomLink() {
+      const link = window.location.origin + '/?sala=' + currentRoom;
+      navigator.clipboard.writeText(link).then(() => alert('Link copiado! Cole no WhatsApp dos amigos.'));
+    }
+          

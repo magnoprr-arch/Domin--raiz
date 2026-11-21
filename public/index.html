@@ -67,4 +67,107 @@
     @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
   </style>
 </head>
+<body>
+  <div id="emoji-toast"></div>
+  <div id="lobby-screen" class="screen">
+    <div class="box">
+      <h2>Domino Raiz Online</h2>
+      <div id="saved-account-bar" class="profile-card" style="display:none;">
+        <div>
+          <strong id="acc-name" style="color:#facc15;"></strong><br>
+          <small id="acc-stats" style="color:#cbd5e1;"></small>
+        </div>
+        <button style="width:auto; padding:6px 10px; margin:0; background:#334155; color:#fff; font-size:12px;" onclick="editAccount()">Editar</button>
+      </div>
+      <div id="account-inputs">
+        <input type="text" id="player-name" placeholder="Criar Conta: Seu Apelido" maxlength="12" />
+        <input type="text" id="player-insta" placeholder="Seu @instagram (opcional)" maxlength="25" />
+      </div>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="join-code" placeholder="Codigo Sala" style="text-transform:uppercase;" maxlength="4" />
+        <button class="btn-blue" style="width:45%;" onclick="joinRoom()">Entrar</button>
+      </div>
+      <select id="game-mode">
+        <option value="pass_pay">Passe Paga + Batida</option>
+        <option value="only_win">Apenas Batida</option>
+      </select>
+      <div style="display:flex; gap:6px;">
+        <input type="number" id="pass-cost" value="10" />
+        <input type="number" id="start-chips" value="500" />
+      </div>
+      <button class="btn-yellow" onclick="createRoom()">Criar Sala (1m20s p/ Amigos)</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-vip" id="btn-open-vip" style="margin-bottom:0;" onclick="openVipModal()">👑 Seja VIP</button>
+        <button class="btn-donate" style="margin-bottom:0;" onclick="openDonateModal()">☕ Apoiar (Pix)</button>
+      </div>
+    </div>
+  </div>
 
+  <div id="donate-modal" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>☕ Apoie o Criador</h2>
+      <p style="font-size:13px; color:#cbd5e1; margin-top:0;">Curtiu o Domino Raiz? Qualquer valor via Pix ajuda a manter o servidor online!</p>
+      <div class="pix-box">
+        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">CHAVE PIX:</div>
+        <strong id="pix-key-text">SUA-CHAVE-PIX-AQUI</strong>
+      </div>
+      <button class="btn-green" onclick="copyPixKey()">📋 Copiar Chave Pix</button>
+      <button style="background:#334155; color:#fff;" onclick="document.getElementById('donate-modal').style.display='none'">Voltar ao Jogo</button>
+    </div>
+  </div>
+
+  <div id="vip-modal" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Passe VIP</h2>
+      <input type="text" id="vip-code-input" placeholder="Chave (Ex: DONO2026)" style="text-transform:uppercase;" />
+      <button class="btn-yellow" onclick="activateVip()">Ativar</button>
+      <button style="background:#334155; color:#fff;" onclick="document.getElementById('vip-modal').style.display='none'">Voltar</button>
+    </div>
+  </div>
+
+  <div id="wait-screen" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Sala: <span id="display-code">----</span></h2>
+      <div id="wait-timer-display" class="wait-timer-box">⏳ Bots entram em: 01:20</div>
+      <button class="btn-whatsapp" onclick="shareWhatsApp()">📲 Convidar Amigos no WhatsApp</button>
+      <button style="background:#334155; color:#fff; font-size:13px;" onclick="copyRoomLink()">📋 Copiar Link da Sala</button>
+      <div id="player-list" style="text-align:left; background:#1c1008; padding:10px; border-radius:8px; margin:10px 0; font-size:13px;"></div>
+      <button id="btn-start-game" class="btn-green" onclick="startGame()">Iniciar Agora (Completar c/ Bots)</button>
+    </div>
+  </div>
+
+  <div id="round-modal" class="screen" style="display:none;">
+    <div class="box">
+      <div id="end-banner" class="end-banner"></div>
+      <p id="round-desc" style="text-align:center; color:#fde047; font-size:14px;"></p>
+      <div id="round-players"></div>
+      <button id="btn-next-round" class="btn-yellow" style="margin-top:8px;" onclick="startGame()">Proxima Rodada</button>
+      <button class="btn-donate" style="padding:8px; font-size:13px;" onclick="openDonateModal()">☕ Fazer uma Doacao (Pix)</button>
+    </div>
+  </div>
+
+  <div id="top-bar">
+    <div>Sala: <strong id="top-code">----</strong> ↺</div>
+    <div id="timer-pill">⏱ 10s</div>
+    <div id="top-rule"></div>
+  </div>
+  <div id="game-area">
+    <div id="board-box">
+      <div id="seat-top" class="player-badge"></div>
+      <div id="seat-left" class="player-badge"></div>
+      <div id="seat-right" class="player-badge"></div>
+      <div id="status">Aguardando...</div>
+      <div id="board-canvas"></div>
+    </div>
+    <div id="hand-area">
+      <div style="display:flex; justify-content:space-between; width:100%; align-items:center; gap:8px;">
+        <div id="seat-me" class="player-badge"></div>
+        <button id="btn-pass" style="display:none; background:#dc2626; color:#fff; width:auto; padding:6px 14px; margin:0;" onclick="passTurn()">Passar</button>
+      </div>
+      <div id="side-btns" style="display:none; gap:8px; width:100%;">
+        <button class="btn-blue" style="padding:8px; margin:0;" onclick="confirmSide('left')">⬆ Ponta de Cima</button>
+        <button class="btn-blue" style="padding:8px; margin:0;" onclick="confirmSide('right')">Ponta de Baixo ⬇</button>
+      </div>
+      <div id="hand"></div>
+    </div>
+  </div>

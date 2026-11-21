@@ -70,4 +70,74 @@
     .insta-link { background: #e1306c; color: #fff; text-decoration: none; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
   </style>
 </head>
-  
+  <body>
+  <div id="emoji-toast"></div>
+  <div id="lobby-screen" class="screen">
+    <div class="box">
+      <h2>Domino Raiz Online</h2>
+      <input type="text" id="player-name" placeholder="Seu Apelido" maxlength="12" />
+      <input type="text" id="player-insta" placeholder="Seu @instagram (opcional)" maxlength="25" />
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="join-code" placeholder="Codigo Sala" style="text-transform:uppercase;" maxlength="4" />
+        <button class="btn-blue" style="width:45%;" onclick="joinRoom()">Entrar</button>
+      </div>
+      <select id="game-mode">
+        <option value="pass_pay">Passe Paga + Batida</option>
+        <option value="only_win">Apenas Batida</option>
+      </select>
+      <div style="display:flex; gap:6px;">
+        <input type="number" id="pass-cost" value="10" />
+        <input type="number" id="start-chips" value="500" />
+      </div>
+      <button class="btn-yellow" onclick="createRoom()">Criar Sala Privada</button>
+      <button class="btn-vip" id="btn-open-vip" onclick="openVipModal()">Seja Dono da Mesa (VIP)</button>
+    </div>
+  </div>
+  <div id="vip-modal" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Passe VIP</h2>
+      <input type="text" id="vip-code-input" placeholder="Chave (Ex: DONO2026)" style="text-transform:uppercase;" />
+      <button class="btn-yellow" onclick="activateVip()">Ativar</button>
+      <button style="background:#334155; color:#fff;" onclick="document.getElementById('vip-modal').style.display='none'">Voltar</button>
+    </div>
+  </div>
+  <div id="wait-screen" class="screen" style="display:none;">
+    <div class="box" style="text-align:center;">
+      <h2>Sala: <span id="display-code">----</span></h2>
+      <button class="btn-whatsapp" onclick="shareWhatsApp()">Convidar no WhatsApp</button>
+      <div id="player-list" style="text-align:left; background:#1c1008; padding:10px; border-radius:8px; margin:10px 0;"></div>
+      <button id="btn-start-game" class="btn-green" onclick="startGame()">Iniciar Partida</button>
+    </div>
+  </div>
+  <div id="round-modal" class="screen" style="display:none;">
+    <div class="box">
+      <h2>Fim da Rodada</h2>
+      <p id="round-desc" style="text-align:center; color:#fde047;"></p>
+      <div id="round-players"></div>
+      <button id="btn-next-round" class="btn-yellow" onclick="startGame()">Proxima Rodada</button>
+    </div>
+  </div>
+  <div id="top-bar"><div>Sala: <strong id="top-code">----</strong> ↺</div><div id="top-rule"></div></div>
+  <div id="game-area">
+    <div class="opponents-row">
+      <div id="seat-left" class="player-badge"></div>
+      <div id="seat-top" class="player-badge"></div>
+      <div id="seat-right" class="player-badge"></div>
+    </div>
+    <div id="board-box">
+      <div id="status">Aguardando...</div>
+      <div id="board-canvas"></div>
+    </div>
+    <div id="hand-area">
+      <div style="display:flex; justify-content:space-between; width:100%; align-items:center; gap:8px;">
+        <div id="seat-me" class="player-badge" style="flex:none; padding:4px 10px;"></div>
+        <button id="btn-pass" style="display:none; background:#dc2626; color:#fff; width:auto; padding:6px 14px; margin:0;" onclick="passTurn()">Passar</button>
+      </div>
+      <div id="side-btns" style="display:none; gap:8px; width:100%;">
+        <button class="btn-blue" style="padding:8px; margin:0;" onclick="confirmSide('left')">⬆ Ponta de Cima</button>
+        <button class="btn-blue" style="padding:8px; margin:0;" onclick="confirmSide('right')">Ponta de Baixo ⬇</button>
+      </div>
+      <div id="hand"></div>
+    </div>
+  </div>
+    

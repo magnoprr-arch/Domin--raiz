@@ -403,5 +403,12 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log('Servidor online na porta ' + PORT));
-      
+      // Dentro de io.on('connection', (socket) => { ... })
 
+socket.on('enviarFrase', ({ salaId, jogadorId, texto }) => {
+  // Retransmite a frase apenas para quem está na mesma sala
+  io.to(salaId).emit('fraseRecebida', {
+    jogadorId,
+    texto
+  });
+});

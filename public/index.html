@@ -510,6 +510,84 @@
     function confirmSide(side) { document.getElementById('side-btns').style.display = 'none'; socket.emit('playTile', { roomCode: currentRoom, tileIndex: selectedIdx, side }); }
     function passTurn() { socket.emit('passTurn', { roomCode: currentRoom }); }
   </script>
+  <style>
+  .bot-thinking-badge {
+    position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+    background: #f59e0b; color: #111; font-size: 11px; font-weight: bold;
+    padding: 3px 8px; border-radius: 12px; white-space: nowrap; z-index: 20;
+  }
+  .chat-bubble {
+    position: absolute; top: -42px; left: 50%; transform: translateX(-50%);
+    background: #fff; color: #111; font-size: 12px; font-weight: bold;
+    padding: 5px 10px; border-radius: 12px; white-space: nowrap;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4); z-index: 30;
+  }
+  #btn-frases {
+    position: fixed; bottom: 16px; right: 16px; background: #10b981;
+    color: #fff; border: none; border-radius: 50px; padding: 10px 15px;
+    font-weight: bold; z-index: 100;
+  }
+  #menu-frases {
+    display: none; position: fixed; bottom: 62px; right: 16px;
+    background: #1e293b; border-radius: 10px; padding: 6px; width: 220px; z-index: 100;
+  }
+  .frase-item {
+    width: 100%; text-align: left; background: none; color: #fff;
+    border: none; padding: 8px; font-size: 13px;
+  }
+</style>
+
+<button id="btn-frases" onclick="const m=document.getElementById('menu-frases');m.style.display=m.style.display==='block'?'none':'block'">💬 Resenha</button>
+<div id="menu-frases"></div>
+
+<script>
+  const FRASES = [
+    "🤔 Joga logo, tá criando raiz!",
+    "🧱 Lá vem o pedreiro fechar!",
+    "🫣 Ih, essa doeu na alma!",
+    "🐐 Cheirinho de bucha...",
+    "😂 Passei, mas foi estratégia!",
+    "🔥 Bateu bonito, respeita!",
+    "💀 Fechei o caixão, pode contar!",
+    "🍺 Paga a rodada que essa já era!"
+  ];
+
+  const menu = document.getElementById('menu-frases');
+  FRASES.forEach(txt => {
+    const b = document.createElement('button');
+    b.className = 'frase-item';
+    b.innerText = txt;
+    b.onclick = () => {
+      // Se suas variáveis tiverem outro nome, ajuste salaId e meuId abaixo:
+      socket.emit('enviarFrase', { salaId: window.salaId || roomId, jogadorId: window.meuId || socket.id, texto: txt });
+      menu.style.display = 'none';
+    };
+    menu.appendChild(b);
+  });
+
+  socket.on('fraseRecebida', ({ jogadorId, texto }) => {
+    const seat = document.getElementById(`seat-${jogadorId}`);
+    if (!seat) return;
+    seat.querySelectorAll('.chat-bubble').forEach(e => e.remove());
+    const div = document.createElement('div');
+    div.className = 'chat-bubble';
+    div.innerText = texto;
+    seat.appendChild(div);
+    setTimeout(() => div.remove(), 3500);
+  });
+
+  function mostrarBotPensando(botId) {
+    document.querySelectorAll('.bot-thinking-badge').forEach(e => e.remove());
+    const seat = document.getElementById(`seat-${botId}`);
+    if (seat) {
+      const b = document.createElement('div');
+      b.className = 'bot-thinking-badge';
+      b.innerText = '🤖 Bot pensando...';
+      seat.appendChild(b);
+    }
+  }
+</script>
+
 </body>
 </html>
 

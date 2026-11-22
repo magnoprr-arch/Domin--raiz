@@ -412,3 +412,8 @@ socket.on('enviarFrase', ({ salaId, jogadorId, texto }) => {
     texto
   });
 });
+socket.on('enviarFrase', ({ salaId, jogadorId, texto }) => {
+  io.to(salaId).emit('fraseRecebida', { jogadorId, texto });
+});
+
+
